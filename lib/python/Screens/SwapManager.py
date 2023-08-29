@@ -1,18 +1,20 @@
-from Screens.Screen import Screen
-from Screens.MessageBox import MessageBox
-from Screens.ChoiceBox import ChoiceBox
-from Components.config import config, configfile, ConfigYesNo
+from glob import glob
+from os import system, stat as mystat, remove, rename
+from os.path import exists, normpath
+import stat
+from enigma import eTimer
+
 from Components.ActionMap import ActionMap
+from Components.config import config, configfile, ConfigYesNo
+from Components.Console import Console
+from Components.Harddisk import harddiskmanager, getProcMounts
 from Components.Label import Label
 from Components.Pixmap import Pixmap
-from Components.Harddisk import harddiskmanager, getProcMounts
-from Components.Console import Console
 from Components.Sources.StaticText import StaticText
-from os import system, stat as mystat, path, remove, rename
-from enigma import eTimer
-from glob import glob
-import stat
-import six
+
+from Screens.ChoiceBox import ChoiceBox
+from Screens.MessageBox import MessageBox
+from Screens.Screen import Screen
 
 config.usage.swapautostart = ConfigYesNo(default=False)
 
@@ -35,36 +37,34 @@ class StartSwap:
 		self.Console.ePopen("sfdisk -l /dev/sd? 2>/dev/null | grep swap", self.startSwap2)
 
 	def startSwap2(self, result=None, retval=None, extra_args=None):
-		if result is not None:
-			result = six.ensure_str(result)
 		swap_place = ""
-		if result and result.find('sd') != -1:
-			for line in result.split('\n'):
-				if line.find('sd') != -1:
+		if result and result.find("sd") != -1:
+			for line in result.split("\n"):
+				if line.find("sd") != -1:
 					parts = line.strip().split()
 					swap_place = parts[0]
-					open('/etc/fstab.tmp', 'w').writelines([l for l in open('/etc/fstab').readlines() if swap_place not in l])
-					rename('/etc/fstab.tmp', '/etc/fstab')
-					print("[SwapManager] Found a swap partition:", swap_place)
+					open("/etc/fstab.tmp", "w").writelines([l for l in open("/etc/fstab").readlines() if swap_place not in l])
+					rename("/etc/fstab.tmp", "/etc/fstab")
+					print(f"[SwapManager] Found a swap partition:{swap_place}")
 		else:
 			devicelist = []
 			for p in harddiskmanager.getMountedPartitions():
-				d = path.normpath(p.mountpoint)
-				if path.exists(p.mountpoint) and p.mountpoint != "/" and not p.mountpoint.startswith('/media/net') and not p.mountpoint.startswith('/media/autofs'):
+				d = normpath(p.mountpoint)
+				if exists(p.mountpoint) and p.mountpoint != "/" and not p.mountpoint.startswith("/media/net") and not p.mountpoint.startswith("/media/autofs"):
 					devicelist.append((p.description, d))
-			if len(devicelist):
+			if devicelist:
 				for device in devicelist:
-					for filename in glob(device[1] + '/swap*'):
-						if path.exists(filename):
+					for filename in glob(device[1] + "/swap*"):
+						if exists(filename):
 							swap_place = filename
-							print("[SwapManager] Found a swapfile on ", swap_place)
+							print(f"[SwapManager] Found a swapfile on {swap_place}")
 
-		f = open('/proc/swaps').read()
+		f = open("/proc/swaps").read()
 		if f.find(swap_place) == -1:
-			print("[SwapManager] Starting swapfile on ", swap_place)
-			system('swapon ' + swap_place)
+			print(f"[SwapManager] Starting swapfile on {swap_place}")
+			system(f"swapon {swap_place}")
 		else:
-			print("[SwapManager] Swapfile is already active on ", swap_place)
+			print(f"[SwapManager] Swapfile is already active on {swap_place}")
 
 #######################################################################
 
@@ -93,30 +93,30 @@ class Swap(Screen):
 	def __init__(self, session):
 		Screen.__init__(self, session)
 		self.setTitle(_("Swap Manager"))
-		self['lab1'] = Label()
-		self['autostart_on'] = Pixmap()
-		self['autostart_off'] = Pixmap()
-		self['lab2'] = Label(_("Swap Place:"))
-		self['labplace'] = Label()
-		self['lab3'] = Label(_("Swap Size:"))
-		self['labsize'] = Label()
-		self['lab4'] = Label(_("Status:"))
-		self['inactive'] = Label(_("Inactive"))
-		self['active'] = Label(_("Active"))
-		self['key_red'] = Label(_("Activate"))
-		self['key_green'] = Label(_("Create"))
-		self['key_yellow'] = Label(_("Autostart"))
-		self['swapname_summary'] = StaticText()
-		self['swapactive_summary'] = StaticText()
+		self["lab1"] = Label()
+		self["autostart_on"] = Pixmap()
+		self["autostart_off"] = Pixmap()
+		self["lab2"] = Label(_("Swap Place:"))
+		self["labplace"] = Label()
+		self["lab3"] = Label(_("Swap Size:"))
+		self["labsize"] = Label()
+		self["lab4"] = Label(_("Status:"))
+		self["inactive"] = Label(_("Inactive"))
+		self["active"] = Label(_("Active"))
+		self["key_red"] = Label(_("Activate"))
+		self["key_green"] = Label(_("Create"))
+		self["key_yellow"] = Label(_("Autostart"))
+		self["swapname_summary"] = StaticText()
+		self["swapactive_summary"] = StaticText()
 		self.Console = Console()
-		self.swap_place = ''
-		self.new_place = ''
+		self.swap_place = ""
+		self.new_place = ""
 		self.creatingswap = False
-		self['actions'] = ActionMap(['WizardActions', 'ColorActions', "MenuActions"], {
-			'back': self.close,
-			'red': self.actDeact,
-			'green': self.createDel,
-			'yellow': self.autoSsWap,
+		self["actions"] = ActionMap(["WizardActions", "ColorActions", "MenuActions"], {
+			"back": self.close,
+			"red": self.actDeact,
+			"green": self.createDel,
+			"yellow": self.autoSsWap,
 			"menu": self.close
 		})
 		self.activityTimer = eTimer()
@@ -126,141 +126,135 @@ class Swap(Screen):
 	def updateSwap(self, result=None, retval=None, extra_args=None):
 		self["actions"].setEnabled(False)
 		self.swap_active = False
-		self['autostart_on'].hide()
-		self['autostart_off'].show()
-		self['active'].hide()
-		self['inactive'].show()
-		self['labplace'].hide()
-		self['labsize'].hide()
-		self['swapactive_summary'].setText(_("Current Status:"))
+		self["autostart_on"].hide()
+		self["autostart_off"].show()
+		self["active"].hide()
+		self["inactive"].show()
+		self["labplace"].hide()
+		self["labsize"].hide()
+		self["swapactive_summary"].setText(_("Current Status:"))
 		scanning = _("Wait please while scanning...")
-		self['lab1'].setText(scanning)
+		self["lab1"].setText(scanning)
 		self.activityTimer.start(10)
 
 	def getSwapDevice(self):
 		self.activityTimer.stop()
-		if path.exists('/etc/rcS.d/S98SwapManager'):
-			remove('/etc/rcS.d/S98SwapManager')
+		if exists("/etc/rcS.d/S98SwapManager"):
+			remove("/etc/rcS.d/S98SwapManager")
 			config.usage.swapautostart.value = True
 			config.usage.swapautostart.save()
-		if path.exists('/tmp/swapdevices.tmp'):
-			remove('/tmp/swapdevices.tmp')
+		if exists("/tmp/swapdevices.tmp"):
+			remove("/tmp/swapdevices.tmp")
 		self.Console.ePopen("sfdisk -l /dev/sd? 2>/dev/null | grep swap", self.updateSwap2)
 
 	def updateSwap2(self, result=None, retval=None, extra_args=None):
-		if result is not None:
-			result = six.ensure_str(result)
 		self.swapsize = 0
-		self.swap_place = ''
+		self.swap_place = ""
 		self.swap_active = False
 		self.device = False
-		if result.find('sd') > 0:
-			self['key_green'].setText("")
-			for line in result.split('\n'):
-				if line.find('sd') > 0:
+		if result.find("sd") > 0:
+			self["key_green"].setText("")
+			for line in result.split("\n"):
+				if line.find("sd") > 0:
 					parts = line.strip().split()
 					self.swap_place = parts[0]
-					if self.swap_place == 'sfdisk:':
-						self.swap_place = ''
+					if self.swap_place == "sfdisk:":
+						self.swap_place = ""
 					self.device = True
-				f = open('/proc/swaps')
+				f = open("/proc/swaps")
 				for line in f.readlines():
 					parts = line.strip().split()
-					if line.find('partition') != -1:
+					if line.find("partition") != -1:
 						self.swap_active = True
 						self.swapsize = parts[2]
 						continue
 				f.close()
 		else:
-			self['key_green'].setText(_("Create"))
+			self["key_green"].setText(_("Create"))
 			devicelist = []
 			for p in harddiskmanager.getMountedPartitions():
-				d = path.normpath(p.mountpoint)
-				if path.exists(p.mountpoint) and p.mountpoint != "/" and not p.mountpoint.startswith('/media/net') and not p.mountpoint.startswith('/media/autofs'):
+				d = normpath(p.mountpoint)
+				if exists(p.mountpoint) and p.mountpoint != "/" and not p.mountpoint.startswith("/media/net") and not p.mountpoint.startswith("/media/autofs"):
 					devicelist.append((p.description, d))
-			if len(devicelist):
+			if devicelist:
 				for device in devicelist:
-					for filename in glob(device[1] + '/swap*'):
+					for filename in glob(device[1] + "/swap*"):
 						self.swap_place = filename
-						self['key_green'].setText(_("Delete"))
+						self["key_green"].setText(_("Delete"))
 						info = mystat(self.swap_place)
 						self.swapsize = info[stat.ST_SIZE]
 						continue
 
 		if config.usage.swapautostart.value and self.swap_place:
-			self['autostart_off'].hide()
-			self['autostart_on'].show()
+			self["autostart_off"].hide()
+			self["autostart_on"].show()
 		else:
 			config.usage.swapautostart.value = False
 			config.usage.swapautostart.save()
 			configfile.save()
-			self['autostart_on'].hide()
-			self['autostart_off'].show()
-		self['labplace'].setText(self.swap_place)
-		self['labplace'].show()
+			self["autostart_on"].hide()
+			self["autostart_off"].show()
+		self["labplace"].setText(self.swap_place)
+		self["labplace"].show()
 
-		f = open('/proc/swaps')
-		for line in f.readlines():
-			parts = line.strip().split()
-			if line.find('partition') != -1:
-				self.swap_active = True
-				continue
-			elif line.find('file') != -1:
-				self.swap_active = True
-				continue
-		f.close()
+		with open("/proc/swaps") as fd:
+			for line in fd.readlines():
+				parts = line.strip().split()
+				if line.find("partition") != -1 or line.find("file") != -1:
+					self.swap_active = True
+					continue
 
 		if self.swapsize > 0:
 			if self.swapsize >= 1024:
 				self.swapsize = int(self.swapsize) // 1024
 				if self.swapsize >= 1024:
 					self.swapsize = int(self.swapsize) // 1024
-				self.swapsize = str(self.swapsize) + ' ' + 'MB'
+				self.swapsize = f"{self.swapsize} MB"
 			else:
-				self.swapsize = str(self.swapsize) + ' ' + 'KB'
+				self.swapsize = f"{self.swapsize} KB"
 		else:
-			self.swapsize = ''
+			self.swapsize = ""
 
-		self['labsize'].setText(self.swapsize)
-		self['labsize'].show()
+		self["labsize"].setText(self.swapsize)
+		self["labsize"].show()
 
 		if self.swap_active is True:
-			self['inactive'].hide()
-			self['active'].show()
-			self['key_red'].setText(_("Deactivate"))
-			self['swapactive_summary'].setText(_("Current Status:") + ' ' + _("Active"))
+			self["inactive"].hide()
+			self["active"].show()
+			self["key_red"].setText(_("Deactivate"))
+			self["swapactive_summary"].setText(f"{_("Current Status: ")} {_("Active")}")
 		else:
-			self['inactive'].show()
-			self['active'].hide()
-			self['key_red'].setText(_("Activate"))
-			self['swapactive_summary'].setText(_("Current Status:") + ' ' + _("Inactive"))
+			self["inactive"].show()
+			self["active"].hide()
+			self["key_red"].setText(_("Activate"))
+			self["swapactive_summary"].setText(f"{_("Current Status: ")} {_("Inactive")}")
 
 		scanning = _("Enable Swap at startup")
-		self['lab1'].setText(scanning)
-		self['lab1'].show()
+		self["lab1"].setText(scanning)
+		self["lab1"].show()
 		self["actions"].setEnabled(True)
 
-		name = self['labplace'].text
-		self['swapname_summary'].setText(name)
+		name = self["labplace"].text
+		self["swapname_summary"].setText(name)
 
 	def actDeact(self):
 		if self.swap_active is True:
-			self.Console.ePopen('swapoff ' + self.swap_place, self.updateSwap)
+			self.Console.ePopen(f"swapoff {self.swap_place}", self.updateSwap)
 		else:
 			if not self.device:
-				if self.swap_place != '':
-					self.Console.ePopen('swapon ' + self.swap_place, self.updateSwap)
+				if self.swap_place != "":
+					self.Console.ePopen(f"swapon {self.swap_place}", self.updateSwap)
 				else:
 					mybox = self.session.open(MessageBox, _("Swap File not found. You have to create the file before to activate."), MessageBox.TYPE_INFO)
 					mybox.setTitle(_("Info"))
 			else:
-				self.Console.ePopen('swapon ' + self.swap_place, self.updateSwap)
+				self.Console.ePopen("swapon " + self.swap_place, self.updateSwap)
 
 	def createDel(self):
 		if not self.device:
-			if self.swap_place != '':
+			if self.swap_place != "":
 				if self.swap_active is True:
-					self.Console.ePopen('swapoff ' + self.swap_place, self.createDel2)
+					self.Console.ePopen(f"swapoff {self.swap_place}", self.createDel2)
 				else:
 					self.createDel2(None, 0)
 			else:
@@ -276,8 +270,7 @@ class Swap(Screen):
 			self.updateSwap()
 
 	def doCreateSwap(self):
-		parts = []
-		supported_filesystems = frozenset(('ext4', 'ext3', 'ext2', 'vfat'))
+		supported_filesystems = frozenset(("ext4", "ext3", "ext2", "vfat"))
 		candidates = []
 		mounts = getProcMounts()
 		for partition in harddiskmanager.getMountedPartitions(False, mounts):
@@ -298,23 +291,19 @@ class Swap(Screen):
 		if swapsize:
 			self["actions"].setEnabled(False)
 			scanning = _("Wait please while creating swap file...")
-			self['lab1'].setText(scanning)
-			self['lab1'].show()
+			self["lab1"].setText(scanning)
+			self["lab1"].show()
 			swapsize = swapsize[1]
-			myfile = self.new_place + '/swapfile'
+			myfile = self.new_place + "/swapfile"
 			self.commands = []
-			self.commands.append('dd if=/dev/zero of=' + myfile + ' bs=1024 count=' + swapsize + ' 2>/dev/null')
-			self.commands.append('mkswap ' + myfile)
+			self.commands.append(f"dd if=/dev/zero of={myfile} bs=1024 count={swapsize} 2>/dev/null")
+			self.commands.append(f"mkswap {myfile}")
 			self.Console.eBatch(self.commands, self.updateSwap, debug=True)
 
 	def autoSsWap(self):
 		if self.swap_place:
-			if config.usage.swapautostart.value:
-				config.usage.swapautostart.value = False
-				config.usage.swapautostart.save()
-			else:
-				config.usage.swapautostart.value = True
-				config.usage.swapautostart.save()
+			config.usage.swapautostart.value = not config.usage.swapautostart.value
+			config.usage.swapautostart.save()
 			configfile.save()
 		else:
 			mybox = self.session.open(MessageBox, _("You have to create a Swap File before to activate the autostart."), MessageBox.TYPE_INFO)
