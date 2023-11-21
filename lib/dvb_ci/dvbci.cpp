@@ -1653,6 +1653,10 @@ int eDVBCISlot::setCaParameter(eDVBServicePMTHandler *pmthandler)
 		{
 			eDVBFrontend *fe = (eDVBFrontend*) &(*frontend);
 			m_tunernum = fe->getSlotID();
+			if (m_tunernum > 7 && !fe->is_FBCTuner()) // use vu ioctl only for second FBC tuner
+			{
+				m_tunernum = -1;
+			}
 		}
 		eDebug("[CI%d] tunernum = %d", slotid, m_tunernum);
 	}
